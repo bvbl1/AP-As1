@@ -1,7 +1,11 @@
 package main
 
 import (
-	"Assignment1_AbylayMoldakhmet/api-gateway/internal/middleware"
+	"log"
+	"net/http"
+	"net/http/httputil"
+	"net/url"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -9,22 +13,31 @@ import (
 func main() {
 	r := gin.Default()
 
-	// Публичные роуты
-	public := r.Group("/auth")
-	{
-		public.POST("/login", proxy.ToUserService) // Перенаправляем в User Service
-		public.POST("/register", proxy.ToUserService)
+	// Настройка прокси к User Service
+	userServiceURL, err := url.Parse("http://user-service:8080")
+	if err != nil {
+		log.Fatal("Failed to parse user service URL:", err)
 	}
 
-	// Защищенные роуты
-	protected := r.Group("/")
-	protected.Use(middleware.JwtAuthMiddleware("your_jwt_secret"))
-	{
-		protected.GET("/orders", proxy.ToOrderService)
-		protected.POST("/orders", proxy.ToOrderService)
-		protected.GET("/products", proxy.ToInventoryService)
-		// Другие защищенные эндпоинты
+	userServiceProxy := httputil.NewSingleHostReverseProxy(userServiceURL)
+
+	// Роуты API Gateway
+	r.Any("/auth/*path", gin.WrapH(userServiceProxy))
+	r.Any("/users/*path", gin.WrapH(userServiceProxy))
+
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	})
+
+	// Запуск сервера
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8000" // Порт по умолчанию для API Gateway
 	}
 
-	r.Run(":8080")
+	log.Printf("API Gateway started on port %s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal("Failed to start API Gateway:", err)
+	}
 }
