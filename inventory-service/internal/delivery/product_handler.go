@@ -3,6 +3,7 @@ package delivery
 import (
 	"Assignment1_AbylayMoldakhmet/inventory-service/internal/domain"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +23,8 @@ func NewProductHandler(r *gin.Engine, uc domain.ProductUsecase) {
 		products.DELETE("/:id", handler.Delete)
 		products.GET("", handler.List)
 	}
+	r.GET("/api/products/:id/check-stock", handler.CheckStock)
+
 }
 
 func (h *ProductHandler) Create(c *gin.Context) {
@@ -77,10 +80,24 @@ func (h *ProductHandler) Delete(c *gin.Context) {
 }
 
 func (h *ProductHandler) List(c *gin.Context) {
+	// простая реализация без фильтрации и пагинации пока
 	products, err := h.usecase.List(nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, products)
+}
+
+func (h *ProductHandler) CheckStock(c *gin.Context) {
+	productID := c.Param("id")
+	quantity, _ := strconv.Atoi(c.Query("quantity"))
+
+	available, err := h.usecase.CheckStock(productID, quantity)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"available": available})
 }

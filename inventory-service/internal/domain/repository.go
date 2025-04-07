@@ -6,4 +6,5 @@ type ProductRepository interface {
 	Update(product *Product) error
 	Delete(id string) error
 	List(filter map[string]interface{}) ([]*Product, error)
+	// Убрали CheckStock отсюда - это НЕ работа репозитория!
 }

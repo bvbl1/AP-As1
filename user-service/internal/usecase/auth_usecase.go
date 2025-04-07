@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // private реализация интерфейса AuthUsecase
@@ -43,6 +44,7 @@ func (uc *authUsecase) Register(email, password string) (*domain.User, error) {
 	}
 
 	user := &domain.User{
+		ID:       primitive.NewObjectID(),
 		Email:    email,
 		Password: hashedPassword,
 		Role:     "user",
@@ -58,11 +60,16 @@ func (uc *authUsecase) Register(email, password string) (*domain.User, error) {
 func (uc *authUsecase) Login(email, password string) (string, error) {
 	user, err := uc.repo.GetByEmail(email)
 	if err != nil {
-		return "", errors.New("invalid credentials")
+		return "", errors.New("invalid credentials (email)")
+	}
+
+	// Добавьте проверку ID
+	if user.ID.IsZero() {
+		return "", errors.New("user ID is empty")
 	}
 
 	if !pkg.CheckPasswordHash(password, user.Password) {
-		return "", errors.New("invalid credentials")
+		return "", errors.New("invalid credentials (password)")
 	}
 
 	return uc.GenerateToken(user.ID.Hex())

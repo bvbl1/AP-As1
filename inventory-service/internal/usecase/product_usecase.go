@@ -38,3 +38,11 @@ func (uc *productUsecase) Delete(id string) error {
 func (uc *productUsecase) List(filter map[string]interface{}) ([]*domain.Product, error) {
 	return uc.repo.List(filter)
 }
+
+func (uc *productUsecase) CheckStock(productID string, quantity int) (bool, error) {
+	product, err := uc.repo.GetByID(productID) // Используем метод репозитория
+	if err != nil {
+		return false, err
+	}
+	return product.Stock >= quantity, nil // Проверяем хватает ли товара
+}

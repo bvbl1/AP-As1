@@ -27,14 +27,9 @@ func (r *UserRepo) Create(user *domain.User) error {
 		return errors.New("user already exists")
 	}
 
-	hashedPassword, err := pkg.HashPassword(user.Password)
-	if err != nil {
-		return err
-	}
-
-	_, err = r.collection.InsertOne(context.Background(), bson.M{
+	_, err := r.collection.InsertOne(context.Background(), bson.M{
 		"email":    user.Email,
-		"password": hashedPassword,
+		"password": user.Password,
 		"role":     user.Role,
 	})
 	return err
