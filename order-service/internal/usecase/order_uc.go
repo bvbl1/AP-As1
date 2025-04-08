@@ -8,7 +8,7 @@ import (
 
 type OrderUsecase struct {
 	repo            mongodb.OrderRepository
-	inventoryClient clients.InventoryClientInterface // Используем интерфейс
+	inventoryClient clients.InventoryClientInterface
 }
 
 func NewOrderUsecase(repo mongodb.OrderRepository, inventoryClient clients.InventoryClientInterface) *OrderUsecase {
@@ -19,7 +19,6 @@ func NewOrderUsecase(repo mongodb.OrderRepository, inventoryClient clients.Inven
 }
 
 func (uc *OrderUsecase) Create(order *domain.Order) error {
-	// Проверяем остатки
 	for _, item := range order.Items {
 		available, err := uc.inventoryClient.CheckStock(item.ProductID, item.Quantity)
 		if err != nil || !available {
@@ -27,7 +26,6 @@ func (uc *OrderUsecase) Create(order *domain.Order) error {
 		}
 	}
 
-	// Устанавливаем статус по умолчанию
 	order.Status = domain.StatusPending
 
 	return uc.repo.Create(order)
@@ -43,4 +41,7 @@ func (uc *OrderUsecase) UpdateStatus(id string, status domain.OrderStatus) error
 
 func (uc *OrderUsecase) GetByUserID(userID string) ([]*domain.Order, error) {
 	return uc.repo.GetByUserID(userID)
+}
+func (uc *OrderUsecase) GetAll() ([]*domain.Order, error) {
+	return uc.repo.GetAll()
 }

@@ -40,9 +40,9 @@ func (uc *productUsecase) List(filter map[string]interface{}) ([]*domain.Product
 }
 
 func (uc *productUsecase) CheckStock(productID string, quantity int) (bool, error) {
-	product, err := uc.repo.GetByID(productID) // Используем метод репозитория
+	product, err := uc.repo.GetByID(productID)
 	if err != nil {
 		return false, err
 	}
-	return product.Stock >= quantity, nil // Проверяем хватает ли товара
+	return product.Stock >= quantity, nil
 }

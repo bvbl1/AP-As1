@@ -39,9 +39,9 @@ func main() {
 
 	db := client.Database(databaseName)
 	orderRepo := mongodb.NewOrderRepo(db.Collection(collectionName))
-	inventoryClient := clients.NewInventoryClient(inventoryServiceURL) // передаем указатель
+	inventoryClient := clients.NewInventoryClient(inventoryServiceURL)
 
-	orderUC := usecase.NewOrderUsecase(orderRepo, inventoryClient) // передаем указатель на inventoryClient
+	orderUC := usecase.NewOrderUsecase(orderRepo, inventoryClient)
 
 	router := gin.Default()
 	orderHttp.RegisterOrderRoutes(router, orderUC)

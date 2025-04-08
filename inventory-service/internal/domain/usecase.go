@@ -6,5 +6,5 @@ type ProductUsecase interface {
 	Update(product *Product) error
 	Delete(id string) error
 	List(filter map[string]interface{}) ([]*Product, error)
-	CheckStock(productID string, quantity int) (bool, error) // Проверка остатков - это бизнес-логика (Usecase)
+	CheckStock(productID string, quantity int) (bool, error)
 }

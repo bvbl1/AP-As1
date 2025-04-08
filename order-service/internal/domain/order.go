@@ -11,7 +11,7 @@ const (
 )
 
 type Order struct {
-	ID     primitive.ObjectID `bson:"_id" json:"id"`
+	ID     primitive.ObjectID `bson:"_id,omitempty" json:"id"`
 	UserID string             `bson:"user_id" json:"user_id"`
 	Items  []OrderItem        `bson:"items" json:"items"`
 	Status OrderStatus        `bson:"status" json:"status"`
@@ -20,7 +20,7 @@ type Order struct {
 type OrderItem struct {
 	ProductID string  `bson:"product_id" json:"product_id"`
 	Quantity  int     `bson:"quantity" json:"quantity"`
-	Price     float64 `bson:"price" json:"price"` // Цена на момент заказа
+	Price     float64 `bson:"price" json:"price"`
 }
 
 type OrderRepository interface {

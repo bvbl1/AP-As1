@@ -14,9 +14,9 @@ type OrderRepository interface {
 	GetByID(id string) (*domain.Order, error)
 	UpdateStatus(id string, status domain.OrderStatus) error
 	GetByUserID(userID string) ([]*domain.Order, error)
+	GetAll() ([]*domain.Order, error)
 }
 
-// MongoDB реализация
 type OrderRepo struct {
 	collection *mongo.Collection
 }
@@ -67,4 +67,21 @@ func (r *OrderRepo) GetByUserID(userID string) ([]*domain.Order, error) {
 	var orders []*domain.Order
 	err = cursor.All(context.Background(), &orders)
 	return orders, err
+}
+func (r *OrderRepo) GetAll() ([]*domain.Order, error) {
+	var orders []*domain.Order
+	cursor, err := r.collection.Find(context.TODO(), bson.M{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(context.TODO())
+
+	for cursor.Next(context.TODO()) {
+		var order domain.Order
+		if err := cursor.Decode(&order); err != nil {
+			return nil, err
+		}
+		orders = append(orders, &order)
+	}
+	return orders, nil
 }

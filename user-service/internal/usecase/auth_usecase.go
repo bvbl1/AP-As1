@@ -11,7 +11,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// private реализация интерфейса AuthUsecase
 type authUsecase struct {
 	repo      repository.UserRepository
 	jwtSecret string
@@ -63,7 +62,6 @@ func (uc *authUsecase) Login(email, password string) (string, error) {
 		return "", errors.New("invalid credentials (email)")
 	}
 
-	// Добавьте проверку ID
 	if user.ID.IsZero() {
 		return "", errors.New("user ID is empty")
 	}
@@ -75,7 +73,6 @@ func (uc *authUsecase) Login(email, password string) (string, error) {
 	return uc.GenerateToken(user.ID.Hex())
 }
 
-// private реализация интерфейса
 type userUsecase struct {
 	repo repository.UserRepository
 }
@@ -89,7 +86,6 @@ func (uc *userUsecase) GetByID(id string) (*domain.User, error) {
 }
 
 func (uc *userUsecase) Update(user *domain.User) error {
-	// Бизнес-логика при необходимости
 	return uc.repo.Update(user)
 }
 

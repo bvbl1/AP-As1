@@ -80,7 +80,6 @@ func (h *ProductHandler) Delete(c *gin.Context) {
 }
 
 func (h *ProductHandler) List(c *gin.Context) {
-	// простая реализация без фильтрации и пагинации пока
 	products, err := h.usecase.List(nil)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

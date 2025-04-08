@@ -9,15 +9,13 @@ import (
 )
 
 type OrderHandler struct {
-	uc *usecase.OrderUsecase // изменили на указатель
+	uc *usecase.OrderUsecase
 }
 
 func RegisterOrderRoutes(r *gin.Engine, uc *usecase.OrderUsecase) {
-	handler := &OrderHandler{uc: uc} // передаем указатель
+	handler := &OrderHandler{uc: uc}
 
-	// Protected routes (require JWT)
 	protected := r.Group("/orders")
-	// protected.Use(middleware.JwtAuthMiddleware()) // Раскомментировать после добавления middleware
 	{
 		protected.POST("", handler.Create)
 		protected.GET("/:id", handler.GetByID)
@@ -26,7 +24,6 @@ func RegisterOrderRoutes(r *gin.Engine, uc *usecase.OrderUsecase) {
 	}
 }
 
-// Create - Создание нового заказа
 func (h *OrderHandler) Create(c *gin.Context) {
 	var order domain.Order
 	if err := c.ShouldBindJSON(&order); err != nil {
@@ -34,7 +31,6 @@ func (h *OrderHandler) Create(c *gin.Context) {
 		return
 	}
 
-	// Установка userID из JWT токена (пример)
 	if userID, exists := c.Get("userID"); exists {
 		order.UserID = userID.(string)
 	}
@@ -51,7 +47,6 @@ func (h *OrderHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, order)
 }
 
-// GetByID - Получение заказа по ID
 func (h *OrderHandler) GetByID(c *gin.Context) {
 	id := c.Param("id")
 	order, err := h.uc.GetByID(id)
@@ -60,7 +55,6 @@ func (h *OrderHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	// Проверка прав доступа (пример)
 	if userID, exists := c.Get("userID"); exists && order.UserID != userID.(string) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
 		return
@@ -69,7 +63,6 @@ func (h *OrderHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, order)
 }
 
-// UpdateStatus - Обновление статуса заказа
 func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	id := c.Param("id")
 
@@ -81,10 +74,8 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	// Проверка допустимых статусов
 	switch request.Status {
 	case domain.StatusPaid, domain.StatusCancelled:
-		// Valid statuses
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status value"})
 		return
@@ -98,25 +89,23 @@ func (h *OrderHandler) UpdateStatus(c *gin.Context) {
 	c.Status(http.StatusOK)
 }
 
-// List - Получение списка заказов пользователя
 func (h *OrderHandler) List(c *gin.Context) {
-	userID := "" // По умолчанию
 	if id, exists := c.Get("userID"); exists {
-		userID = id.(string)
-	}
-
-	if userID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing or invalid user ID"})
+		userID := id.(string)
+		orders, err := h.uc.GetByUserID(userID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"data": orders})
 		return
 	}
 
-	orders, err := h.uc.GetByUserID(userID)
+	orders, err := h.uc.GetAll()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": orders,
-	})
+	c.JSON(http.StatusOK, gin.H{"data": orders})
 }
