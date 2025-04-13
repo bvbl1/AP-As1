@@ -7,7 +7,6 @@ import (
 	"Assignment1_AbylayMoldakhmet/user-service/middleware"
 	"context"
 	"log"
-	"os"
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -31,7 +30,7 @@ func main() {
 	userRepo := mongodb.NewUserRepo(db)
 
 	userUsecase := usecase.NewUserUsecase(userRepo)
-	authUsecase := usecase.NewAuthUsecase(userRepo, os.Getenv("JWT_SECRET"))
+	authUsecase := usecase.NewAuthUsecase(userRepo, "Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg=")
 
 	userHandler := http.NewUserHandler(userUsecase)
 	authHandler := http.NewAuthHandler(authUsecase)
@@ -42,7 +41,7 @@ func main() {
 	r.POST("/auth/login", authHandler.Login)
 
 	userRoutes := r.Group("/users")
-	userRoutes.Use(middleware.JwtAuthMiddleware(os.Getenv("JWT_SECRET")))
+	userRoutes.Use(middleware.JwtAuthMiddleware("Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg="))
 	{
 		userRoutes.GET("/:id", userHandler.GetByID)
 		userRoutes.PUT("/:id", userHandler.Update)

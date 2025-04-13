@@ -1,6 +1,7 @@
 package main
 
 import (
+	"Assignment1_AbylayMoldakhmet/api-gateway/internal/middleware"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -8,6 +9,7 @@ import (
 
 func main() {
 	r := gin.Default()
+	authMiddleware := middleware.JwtAuthMiddleware(`Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg=`)
 
 	r.POST("/auth/register", func(c *gin.Context) {
 		resp, err := http.Post("http://localhost:8081/auth/register", "application/json", c.Request.Body)
@@ -28,6 +30,9 @@ func main() {
 		defer resp.Body.Close()
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
+
+	protected := r.Group("/")
+	protected.Use(authMiddleware)
 
 	r.GET("/users/:id", func(c *gin.Context) {
 		url := "http://localhost:8081/users/" + c.Param("id")
@@ -53,7 +58,7 @@ func main() {
 	})
 
 	// Проксирование запросов к inventory-service
-	r.POST("/products", func(c *gin.Context) {
+	protected.POST("/products", func(c *gin.Context) {
 		resp, err := http.Post("http://localhost:8082/products", "application/json", c.Request.Body)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "inventory service is down"})
@@ -63,7 +68,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.GET("/products/:id", func(c *gin.Context) {
+	protected.GET("/products/:id", func(c *gin.Context) {
 		resp, err := http.Get("http://localhost:8082/products/" + c.Param("id"))
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "inventory service is down"})
@@ -73,7 +78,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.PATCH("/products/:id", func(c *gin.Context) {
+	protected.PATCH("/products/:id", func(c *gin.Context) {
 		req, err := http.NewRequest("PATCH", "http://localhost:8082/products/"+c.Param("id"), c.Request.Body)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -88,7 +93,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.DELETE("/products/:id", func(c *gin.Context) {
+	protected.DELETE("/products/:id", func(c *gin.Context) {
 		req, err := http.NewRequest("DELETE", "http://localhost:8082/products/"+c.Param("id"), nil)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -103,7 +108,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.GET("/products", func(c *gin.Context) {
+	protected.GET("/products", func(c *gin.Context) {
 		resp, err := http.Get("http://localhost:8082/products")
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "inventory service is down"})
@@ -114,7 +119,7 @@ func main() {
 	})
 
 	// Проксирование запросов к order-service
-	r.POST("/orders", func(c *gin.Context) {
+	protected.POST("/orders", func(c *gin.Context) {
 		resp, err := http.Post("http://localhost:8083/orders", "application/json", c.Request.Body)
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "order service is down"})
@@ -124,7 +129,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.GET("/orders/:id", func(c *gin.Context) {
+	protected.GET("/orders/:id", func(c *gin.Context) {
 		resp, err := http.Get("http://localhost:8083/orders/" + c.Param("id"))
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "order service is down"})
@@ -134,7 +139,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.PATCH("/orders/:id", func(c *gin.Context) {
+	protected.PATCH("/orders/:id", func(c *gin.Context) {
 		req, err := http.NewRequest("PATCH", "http://localhost:8083/orders/"+c.Param("id"), c.Request.Body)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
@@ -149,7 +154,7 @@ func main() {
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	})
 
-	r.GET("/orders", func(c *gin.Context) {
+	protected.GET("/orders", func(c *gin.Context) {
 		req, err := http.NewRequest("GET", "http://localhost:8083/orders"+c.Request.URL.RawQuery, nil)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
