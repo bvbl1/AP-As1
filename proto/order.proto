@@ -1,0 +1,54 @@
+syntax = "proto3";
+package order;
+
+option go_package = "./proto/gen;gen";
+
+import "google/protobuf/empty.proto";
+
+service OrderService {
+  rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
+  rpc GetOrder(OrderIDRequest) returns (OrderResponse);
+  rpc UpdateOrderStatus(OrderStatusUpdateRequest) returns (google.protobuf.Empty);
+  rpc ListOrders(OrderFilterRequest) returns (OrderListResponse);
+}
+
+message CreateOrderRequest {
+  string user_id = 1;
+  repeated OrderItem items = 2;
+}
+
+message OrderResponse {
+  string id = 1;
+  string user_id = 2;
+  repeated OrderItem items = 3;
+  OrderStatus status = 4;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  double price = 3;
+}
+
+message OrderIDRequest {
+  string id = 1;
+}
+
+message OrderStatusUpdateRequest {
+  string id = 1;
+  OrderStatus status = 2;
+}
+
+message OrderFilterRequest {
+  optional string user_id = 1;
+}
+
+message OrderListResponse {
+  repeated OrderResponse orders = 1;
+}
+
+enum OrderStatus {
+  PENDING = 0;
+  PAID = 1;
+  CANCELLED = 2;
+}

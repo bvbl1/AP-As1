@@ -19,12 +19,11 @@ import (
 const (
 	userServiceAddr      = "localhost:50051"
 	inventoryServiceAddr = "localhost:50052"
-	orderServiceURL      = "http://localhost:8083"
+	orderServiceAddr     = "localhost:50053"
 	jwtSecret            = "Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg="
 )
 
 func main() {
-	// Инициализация gRPC соединений
 	userConn := initGRPCConn(userServiceAddr)
 	defer userConn.Close()
 	userClient := gen.NewUserServiceClient(userConn)
@@ -33,33 +32,33 @@ func main() {
 	defer inventoryConn.Close()
 	inventoryClient := gen.NewInventoryServiceClient(inventoryConn)
 
+	orderConn := initGRPCConn(orderServiceAddr)
+	defer orderConn.Close()
+	orderClient := gen.NewOrderServiceClient(orderConn)
+
 	r := gin.Default()
 	authMiddleware := middleware.JwtAuthMiddleware(jwtSecret)
 
-	// Auth endpoints
 	r.POST("/auth/register", createAuthHandler(userClient, "Register"))
 	r.POST("/auth/login", createAuthHandler(userClient, "Login"))
 
 	protected := r.Group("/")
 	protected.Use(authMiddleware)
 
-	// User endpoints
 	protected.GET("/users/:id", createUserHandler(userClient, "GetUserProfile"))
 	protected.PUT("/users/:id", createUserHandler(userClient, "UpdateUser"))
 	protected.DELETE("/users/:id", createUserHandler(userClient, "DeleteUser"))
 
-	// Inventory endpoints (gRPC)
 	protected.POST("/products", createInventoryHandler(inventoryClient, "CreateProduct"))
 	protected.GET("/products/:id", createInventoryHandler(inventoryClient, "GetProduct"))
 	protected.PATCH("/products/:id", createInventoryHandler(inventoryClient, "UpdateProduct"))
 	protected.DELETE("/products/:id", createInventoryHandler(inventoryClient, "DeleteProduct"))
 	protected.GET("/products", createInventoryHandler(inventoryClient, "ListProducts"))
 
-	// Order endpoints (REST)
-	protected.POST("/orders", proxyHandler(orderServiceURL))
-	protected.GET("/orders/:id", proxyHandler(orderServiceURL))
-	protected.PATCH("/orders/:id", proxyHandler(orderServiceURL))
-	protected.GET("/orders", proxyHandler(orderServiceURL))
+	protected.POST("/orders", createOrderHandler(orderClient, "CreateOrder"))
+	protected.GET("/orders/:id", createOrderHandler(orderClient, "GetOrder"))
+	protected.PATCH("/orders/:id", createOrderHandler(orderClient, "UpdateOrderStatus"))
+	protected.GET("/orders", createOrderHandler(orderClient, "ListOrders"))
 
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -75,6 +74,55 @@ func initGRPCConn(addr string) *grpc.ClientConn {
 		log.Fatalf("Failed to connect to %s: %v", addr, err)
 	}
 	return conn
+}
+
+func createOrderHandler(client gen.OrderServiceClient, method string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		log.Printf("Order handler called for method: %s, path: %s", method, c.FullPath())
+
+		switch method {
+		case "CreateOrder":
+			var req gen.CreateOrderRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				log.Printf("CreateOrder bad request: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			log.Printf("CreateOrder request: %+v", req)
+			resp, err := client.CreateOrder(c.Request.Context(), &req)
+			handleGRPCResponse(c, resp, err)
+
+		case "GetOrder":
+			orderID := c.Param("id")
+			log.Printf("GetOrder request for ID: %s", orderID)
+			resp, err := client.GetOrder(c.Request.Context(), &gen.OrderIDRequest{
+				Id: orderID,
+			})
+			handleGRPCResponse(c, resp, err)
+
+		case "UpdateOrderStatus":
+			orderID := c.Param("id")
+			log.Printf("UpdateOrderStatus request for ID: %s", orderID)
+
+			var req gen.OrderStatusUpdateRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				log.Printf("UpdateOrderStatus bad request: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			req.Id = orderID
+			resp, err := client.UpdateOrderStatus(c.Request.Context(), &req)
+			handleGRPCResponse(c, resp, err)
+
+		case "ListOrders":
+			resp, err := client.ListOrders(c.Request.Context(), &gen.OrderFilterRequest{})
+			handleGRPCResponse(c, resp, err)
+
+		default:
+			log.Printf("Unknown order method: %s", method)
+			c.JSON(http.StatusNotFound, gin.H{"error": "method not found"})
+		}
+	}
 }
 
 // Inventory handlers
@@ -153,7 +201,6 @@ func createInventoryHandler(client gen.InventoryServiceClient, method string) gi
 	}
 }
 
-// Обработчик для gRPC вызовов
 func createUserHandler(client gen.UserServiceClient, method string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch method {
@@ -181,7 +228,6 @@ func createUserHandler(client gen.UserServiceClient, method string) gin.HandlerF
 	}
 }
 
-// Обработчик для аутентификации
 func createAuthHandler(client gen.UserServiceClient, method string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch method {
@@ -206,12 +252,10 @@ func createAuthHandler(client gen.UserServiceClient, method string) gin.HandlerF
 	}
 }
 
-// Обработчик для REST прокси
 func proxyHandler(baseURL string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		url := baseURL + c.Request.URL.Path
 
-		// Создаем новый запрос
 		body, _ := io.ReadAll(c.Request.Body)
 		req, err := http.NewRequest(c.Request.Method, url, bytes.NewReader(body))
 		if err != nil {
@@ -219,12 +263,10 @@ func proxyHandler(baseURL string) gin.HandlerFunc {
 			return
 		}
 
-		// Копируем заголовки
 		for k, v := range c.Request.Header {
 			req.Header[k] = v
 		}
 
-		// Выполняем запрос
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
@@ -233,12 +275,10 @@ func proxyHandler(baseURL string) gin.HandlerFunc {
 		}
 		defer resp.Body.Close()
 
-		// Копируем ответ
 		c.DataFromReader(resp.StatusCode, resp.ContentLength, resp.Header.Get("Content-Type"), resp.Body, nil)
 	}
 }
 
-// Универсальная обработка gRPC ответов
 func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 	if err != nil {
 		c.JSON(convertGRPCError(err))
@@ -267,6 +307,13 @@ func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 		})
 	case *gen.ListProductsResponse:
 		c.JSON(http.StatusOK, resp.Products)
+	case *gen.OrderResponse:
+		c.JSON(http.StatusOK, gin.H{
+			"id":     resp.Id,
+			"userId": resp.UserId,
+			"status": resp.Status,
+			"items":  resp.Items,
+		})
 	case *emptypb.Empty:
 		c.Status(http.StatusNoContent)
 	default:
@@ -274,7 +321,6 @@ func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 	}
 }
 
-// Конвертация gRPC ошибок в HTTP статусы
 func convertGRPCError(err error) (int, interface{}) {
 	st, ok := status.FromError(err)
 	if !ok {
