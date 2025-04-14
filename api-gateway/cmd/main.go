@@ -5,32 +5,33 @@ import (
 	"Assignment1_AbylayMoldakhmet/proto/gen"
 	"bytes"
 	"io"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
-	userServiceAddr     = "localhost:50051"       // gRPC адрес user-service
-	inventoryServiceURL = "http://localhost:8082" // REST адрес inventory-service
-	orderServiceURL     = "http://localhost:8083" // REST адрес order-service
-	jwtSecret           = "Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg="
+	userServiceAddr      = "localhost:50051"
+	inventoryServiceAddr = "localhost:50052"
+	orderServiceURL      = "http://localhost:8083"
+	jwtSecret            = "Vh8yxpK+3AwtcIj0BcX9uz/LmndCrQ7IInYMDXoMLqg="
 )
 
 func main() {
-	// Создаем gRPC соединение для user-service
-	userConn, err := grpc.Dial(userServiceAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		panic(err)
-	}
+	// Инициализация gRPC соединений
+	userConn := initGRPCConn(userServiceAddr)
 	defer userConn.Close()
-
 	userClient := gen.NewUserServiceClient(userConn)
+
+	inventoryConn := initGRPCConn(inventoryServiceAddr)
+	defer inventoryConn.Close()
+	inventoryClient := gen.NewInventoryServiceClient(inventoryConn)
 
 	r := gin.Default()
 	authMiddleware := middleware.JwtAuthMiddleware(jwtSecret)
@@ -47,14 +48,14 @@ func main() {
 	protected.PUT("/users/:id", createUserHandler(userClient, "UpdateUser"))
 	protected.DELETE("/users/:id", createUserHandler(userClient, "DeleteUser"))
 
-	// Inventory endpoints (остаются REST)
-	protected.POST("/products", proxyHandler(inventoryServiceURL))
-	protected.GET("/products/:id", proxyHandler(inventoryServiceURL))
-	protected.PATCH("/products/:id", proxyHandler(inventoryServiceURL))
-	protected.DELETE("/products/:id", proxyHandler(inventoryServiceURL))
-	protected.GET("/products", proxyHandler(inventoryServiceURL))
+	// Inventory endpoints (gRPC)
+	protected.POST("/products", createInventoryHandler(inventoryClient, "CreateProduct"))
+	protected.GET("/products/:id", createInventoryHandler(inventoryClient, "GetProduct"))
+	protected.PATCH("/products/:id", createInventoryHandler(inventoryClient, "UpdateProduct"))
+	protected.DELETE("/products/:id", createInventoryHandler(inventoryClient, "DeleteProduct"))
+	protected.GET("/products", createInventoryHandler(inventoryClient, "ListProducts"))
 
-	// Order endpoints (остаются REST)
+	// Order endpoints (REST)
 	protected.POST("/orders", proxyHandler(orderServiceURL))
 	protected.GET("/orders/:id", proxyHandler(orderServiceURL))
 	protected.PATCH("/orders/:id", proxyHandler(orderServiceURL))
@@ -64,7 +65,92 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
+	log.Println("API Gateway started on :8000")
 	r.Run(":8000")
+}
+
+func initGRPCConn(addr string) *grpc.ClientConn {
+	conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("Failed to connect to %s: %v", addr, err)
+	}
+	return conn
+}
+
+// Inventory handlers
+func createInventoryHandler(client gen.InventoryServiceClient, method string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		log.Printf("Inventory handler called for method: %s, path: %s", method, c.FullPath())
+
+		switch method {
+		case "CreateProduct":
+			var req gen.CreateProductRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				log.Printf("CreateProduct bad request: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			log.Printf("CreateProduct request: %+v", req)
+			resp, err := client.CreateProduct(c.Request.Context(), &req)
+			handleGRPCResponse(c, resp, err)
+
+		case "GetProduct":
+			productID := c.Param("id")
+			log.Printf("GetProduct request for ID: %s", productID)
+
+			resp, err := client.GetProduct(c.Request.Context(), &gen.ProductIDRequest{
+				Id: productID,
+			})
+
+			if err != nil {
+				log.Printf("GetProduct error: %v", err)
+			} else {
+				log.Printf("GetProduct response: %+v", resp)
+			}
+			handleGRPCResponse(c, resp, err)
+
+		case "UpdateProduct":
+			productID := c.Param("id")
+			log.Printf("UpdateProduct request for ID: %s", productID)
+
+			var req gen.UpdateProductRequest
+			if err := c.ShouldBindJSON(&req); err != nil {
+				log.Printf("UpdateProduct bad request: %v", err)
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			req.Id = productID
+
+			resp, err := client.UpdateProduct(c.Request.Context(), &req)
+			handleGRPCResponse(c, resp, err)
+
+		case "DeleteProduct":
+			productID := c.Param("id")
+			log.Printf("DeleteProduct request for ID: %s", productID)
+
+			resp, err := client.DeleteProduct(c.Request.Context(), &gen.ProductIDRequest{
+				Id: productID,
+			})
+			handleGRPCResponse(c, resp, err)
+
+		case "ListProducts":
+			log.Printf("ListProducts request with query: %v", c.Request.URL.Query())
+
+			filter := make(map[string]string)
+			for k, v := range c.Request.URL.Query() {
+				filter[k] = v[0]
+			}
+
+			resp, err := client.ListProducts(c.Request.Context(), &gen.ListProductsRequest{
+				Filter: filter,
+			})
+			handleGRPCResponse(c, resp, err)
+
+		default:
+			log.Printf("Unknown inventory method: %s", method)
+			c.JSON(http.StatusNotFound, gin.H{"error": "method not found"})
+		}
+	}
 }
 
 // Обработчик для gRPC вызовов
@@ -171,6 +257,16 @@ func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 			"access_token":  resp.AccessToken,
 			"refresh_token": resp.RefreshToken,
 		})
+	case *gen.ProductResponse:
+		c.JSON(http.StatusOK, gin.H{
+			"id":       resp.Id,
+			"name":     resp.Name,
+			"price":    resp.Price,
+			"category": resp.Category,
+			"stock":    resp.Stock,
+		})
+	case *gen.ListProductsResponse:
+		c.JSON(http.StatusOK, resp.Products)
 	case *emptypb.Empty:
 		c.Status(http.StatusNoContent)
 	default:
@@ -180,6 +276,21 @@ func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 
 // Конвертация gRPC ошибок в HTTP статусы
 func convertGRPCError(err error) (int, interface{}) {
-	// Реализуйте конвертацию на основе gRPC status codes
-	return http.StatusInternalServerError, gin.H{"error": err.Error()}
+	st, ok := status.FromError(err)
+	if !ok {
+		return http.StatusInternalServerError, gin.H{"error": err.Error()}
+	}
+
+	switch st.Code() {
+	case codes.NotFound:
+		return http.StatusNotFound, gin.H{"error": st.Message()}
+	case codes.InvalidArgument:
+		return http.StatusBadRequest, gin.H{"error": st.Message()}
+	case codes.PermissionDenied:
+		return http.StatusForbidden, gin.H{"error": st.Message()}
+	case codes.Unauthenticated:
+		return http.StatusUnauthorized, gin.H{"error": st.Message()}
+	default:
+		return http.StatusInternalServerError, gin.H{"error": st.Message()}
+	}
 }

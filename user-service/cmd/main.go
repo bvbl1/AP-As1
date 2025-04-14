@@ -27,19 +27,15 @@ const (
 )
 
 func main() {
-	// Инициализация подключения к MongoDB
 	client := connectMongoDB()
 	defer client.Disconnect(context.Background())
 
-	// Инициализация репозиториев и use cases
 	repo := mongodb.NewUserRepo(client.Database(databaseName))
 	authUC := usecase.NewAuthUsecase(repo, jwtSecret)
 	userUC := usecase.NewUserUsecase(repo)
 
-	// Создание и запуск gRPC сервера
 	grpcServer := createGRPCServer(authUC, userUC)
 
-	// Graceful shutdown
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

@@ -29,11 +29,14 @@ func (r *ProductRepo) Create(product *domain.Product) error {
 func (r *ProductRepo) GetByID(id string) (*domain.Product, error) {
 	objID, err := primitive.ObjectIDFromHex(id)
 	if err != nil {
-		return nil, errors.New("invalid ID format")
+		return nil, domain.ErrProductNotFound
 	}
 
 	var product domain.Product
 	err = r.collection.FindOne(context.Background(), bson.M{"_id": objID}).Decode(&product)
+	if err == mongo.ErrNoDocuments {
+		return nil, domain.ErrProductNotFound
+	}
 	if err != nil {
 		return nil, err
 	}
