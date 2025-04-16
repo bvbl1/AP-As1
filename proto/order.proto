@@ -1,4 +1,5 @@
 syntax = "proto3";
+
 package order;
 
 option go_package = "./proto/gen;gen";
@@ -9,7 +10,7 @@ service OrderService {
   rpc CreateOrder(CreateOrderRequest) returns (OrderResponse);
   rpc GetOrder(OrderIDRequest) returns (OrderResponse);
   rpc UpdateOrderStatus(OrderStatusUpdateRequest) returns (google.protobuf.Empty);
-  rpc ListOrders(OrderFilterRequest) returns (OrderListResponse);
+  rpc ListOrders(OrderFilterRequest) returns (OrderListResponse); // <- Этот метод возвращает список заказов
 }
 
 message CreateOrderRequest {

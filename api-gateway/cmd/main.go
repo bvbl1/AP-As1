@@ -104,14 +104,35 @@ func createOrderHandler(client gen.OrderServiceClient, method string) gin.Handle
 			orderID := c.Param("id")
 			log.Printf("UpdateOrderStatus request for ID: %s", orderID)
 
-			var req gen.OrderStatusUpdateRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
+			var jsonBody struct {
+				Status string `json:"status"`
+			}
+
+			if err := c.ShouldBindJSON(&jsonBody); err != nil {
 				log.Printf("UpdateOrderStatus bad request: %v", err)
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			req.Id = orderID
-			resp, err := client.UpdateOrderStatus(c.Request.Context(), &req)
+
+			var status gen.OrderStatus
+			switch jsonBody.Status {
+			case "pending":
+				status = gen.OrderStatus_PENDING
+			case "paid":
+				status = gen.OrderStatus_PAID
+			case "cancelled":
+				status = gen.OrderStatus_CANCELLED
+			default:
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid order status"})
+				return
+			}
+
+			req := &gen.OrderStatusUpdateRequest{
+				Id:     orderID,
+				Status: status,
+			}
+
+			resp, err := client.UpdateOrderStatus(c.Request.Context(), req)
 			handleGRPCResponse(c, resp, err)
 
 		case "ListOrders":
@@ -307,15 +328,30 @@ func handleGRPCResponse(c *gin.Context, response interface{}, err error) {
 		})
 	case *gen.ListProductsResponse:
 		c.JSON(http.StatusOK, resp.Products)
+
 	case *gen.OrderResponse:
 		c.JSON(http.StatusOK, gin.H{
 			"id":     resp.Id,
 			"userId": resp.UserId,
-			"status": resp.Status,
+			"status": resp.Status.String(),
 			"items":  resp.Items,
 		})
+
+	case *gen.OrderListResponse:
+		orders := make([]map[string]interface{}, 0)
+		for _, o := range resp.Orders {
+			orders = append(orders, map[string]interface{}{
+				"id":     o.Id,
+				"userId": o.UserId,
+				"status": o.Status.String(),
+				"items":  o.Items,
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{"orders": orders})
+
 	case *emptypb.Empty:
 		c.Status(http.StatusNoContent)
+
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "unknown response type"})
 	}
